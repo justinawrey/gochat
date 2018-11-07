@@ -106,7 +106,8 @@ func (c *Chatter) OnMsgReceive(f func(Msg)) {
 // The main functionality of Room is to add / remove Chatters.
 type Room struct {
 	// Name is the name of the room.
-	Name     string
+	Name string
+
 	chatters []*Chatter
 }
 
