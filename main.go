@@ -13,10 +13,10 @@ func main() {
 	c3 := chat.NewChatter("connor")
 
 	for _, c := range []*chat.Chatter{c1, c2, c3} {
+		c.Join(r)
 		c.OnMsgReceive(func(m chat.Msg) {
 			fmt.Println(m)
 		})
-		c.Join(r)
 	}
 
 	c1.Send("testing from justin")
