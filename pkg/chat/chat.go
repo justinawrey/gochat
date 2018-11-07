@@ -4,30 +4,16 @@ import (
 	"fmt"
 )
 
-// Chatter is a chat room participant.  It can
-// send messages to a room, and set callback functions
-// which fire when a new message is received by someone
-// else in the room.
-type Chatter struct {
-	Name    string
-	Handler func(Msg)
-	Room    *Room
-
-	receive chan Msg
-	quit    chan struct{}
-}
-
-// Room is a chatroom that contains one or more Chatters.
-// The main functionality of Room is to add / remove Chatters.
-type Room struct {
-	Name     string
-	Chatters []*Chatter
-}
-
 // Msg is a chatroom message.  It implements fmt.Stringer,
 // so it can be passed to the Print family of functions.
 type Msg struct {
-	From     string
+	// From is the sender of this message.
+	From string
+
+	// Room is the room within which this message was sent.
+	Room *Room
+
+	// Contents is the contents of the message.
 	Contents string
 }
 
@@ -36,12 +22,29 @@ func (m Msg) String() string {
 	return fmt.Sprintf("%s > %s", m.From, m.Contents)
 }
 
+// Chatter is a chat room participant.  It can
+// send messages to a room, and set callback functions
+// which fire when a new message is received by someone
+// else in the room.
+type Chatter struct {
+	// Name is the name of this chatter.
+	Name string
+
+	// Room is the most recent room that this chatter belongs to.
+	Room *Room
+
+	handler func(Msg)
+	receive chan Msg
+	quit    chan struct{}
+}
+
 // NewChatter creates a new Chatter with specified name.
 func NewChatter(name string) *Chatter {
 	c := &Chatter{
 		Name: name,
+
 		// The default chat message handler does nothing.
-		Handler: func(Msg) { return },
+		handler: func(Msg) { return },
 		receive: make(chan Msg),
 		quit:    make(chan struct{}),
 	}
@@ -54,7 +57,7 @@ func NewChatter(name string) *Chatter {
 			case <-c.quit:
 				return
 			case m := <-c.receive:
-				c.Handler(m)
+				c.handler(m)
 			}
 		}
 	}()
@@ -64,7 +67,7 @@ func NewChatter(name string) *Chatter {
 
 // Join adds Chatter c to Room r.
 func (c *Chatter) Join(r *Room) {
-	r.Chatters = append(r.Chatters, c)
+	r.chatters = append(r.chatters, c)
 	c.Room = r
 
 	r.broadcast("admin", fmt.Sprintf("%s has entered the room", c.Name))
@@ -72,9 +75,9 @@ func (c *Chatter) Join(r *Room) {
 
 // Leave removes Chatter c from Room r.
 func (c *Chatter) Leave(r *Room) {
-	for i, chatter := range r.Chatters {
+	for i, chatter := range r.chatters {
 		if chatter.Name == c.Name {
-			r.Chatters = append(r.Chatters[:i], r.Chatters[i+1:]...)
+			r.chatters = append(r.chatters[:i], r.chatters[i+1:]...)
 			c.Room = nil
 			close(c.quit)
 
@@ -94,7 +97,45 @@ func (c *Chatter) Send(m string) {
 // OnMsgReceive executes method f (which takes a single msg parameter)
 // every time c receives a message from its current room.
 func (c *Chatter) OnMsgReceive(f func(Msg)) {
-	c.Handler = f
+	c.handler = f
+}
+
+// Room is a chatroom that contains one or more Chatters.
+// The main functionality of Room is to add / remove Chatters.
+type Room struct {
+	// Name is the name of the room.
+	Name     string
+	chatters []*Chatter
+}
+
+// NewRoom returns a new room with name name.
+func NewRoom(name string) *Room {
+	return &Room{
+		Name: name,
+	}
+}
+
+// Chatters returns the names of all Chatters in r.
+func (r *Room) Chatters() []string {
+	var res []string
+	for _, c := range r.chatters {
+		res = append(res, c.Name)
+	}
+	return res
+}
+
+// Add adds Chatter c to Room r.
+// This is a convenience function and is semantically the same
+// as c.Join(r).
+func (r *Room) Add(c *Chatter) {
+	c.Join(r)
+}
+
+// Remove removes Chatter c from Room r.
+// This is a convenience function and is semantically the same
+// as c.Leave(r).
+func (r *Room) Remove(c *Chatter) {
+	c.Leave(r)
 }
 
 // Flush flushes out all lingering messages
@@ -116,7 +157,7 @@ func (r *Room) Close() {
 // broadcast broadcasts a message msg to all chatters
 // in the room r.
 func (r *Room) broadcast(from string, m string) {
-	for _, c := range r.Chatters {
+	for _, c := range r.chatters {
 		if c.Room != nil {
 			c.receive <- Msg{From: from, Contents: m}
 		}
