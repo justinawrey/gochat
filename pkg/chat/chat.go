@@ -18,6 +18,8 @@ type Msg struct {
 }
 
 // String implements fmt.Stringer.
+// Prints in the form:
+// "<m.From> > <m.Contents>"
 func (m Msg) String() string {
 	return fmt.Sprintf("%s > %s", m.From, m.Contents)
 }
