@@ -10,6 +10,7 @@ import (
 // else in the room.
 type Chatter struct {
 	Name    string
+	handler func(Msg)
 	room    *Room
 	receive chan Msg
 	quit    chan struct{}
@@ -36,11 +37,28 @@ func (m Msg) String() string {
 
 // NewChatter creates a new Chatter with specified name.
 func NewChatter(name string) *Chatter {
-	return &Chatter{
-		Name:    name,
+	c := &Chatter{
+		Name: name,
+		// The default chat message handler does nothing.
+		handler: func(Msg) { return },
 		receive: make(chan Msg),
 		quit:    make(chan struct{}),
 	}
+
+	go func() {
+		defer close(c.receive)
+
+		for {
+			select {
+			case <-c.quit:
+				return
+			case m := <-c.receive:
+				c.handler(m)
+			}
+		}
+	}()
+
+	return c
 }
 
 // Join adds Chatter c to Room r.
@@ -56,7 +74,8 @@ func (c *Chatter) Leave(r *Room) {
 	for i, chatter := range r.chatters {
 		if chatter.Name == c.Name {
 			r.chatters = append(r.chatters[:i], r.chatters[i+1:]...)
-			c.quit <- struct{}{}
+			c.room = nil
+			close(c.quit)
 
 			r.broadcast("admin", fmt.Sprintf("%s has left the room", c.Name))
 			break
@@ -64,7 +83,7 @@ func (c *Chatter) Leave(r *Room) {
 	}
 }
 
-// Send sends a message msg on behald of Chatter c.
+// Send sends a mesrage msg on behald of Chatter c.
 // The message is sent to the ONE most recent room
 // that c was added to.
 func (c *Chatter) Send(m string) {
@@ -74,22 +93,18 @@ func (c *Chatter) Send(m string) {
 // OnMsgReceive executes method f (which takes a single msg parameter)
 // every time c receives a message from its current room.
 func (c *Chatter) OnMsgReceive(f func(Msg)) {
-	go func() {
-		for {
-			select {
-			case <-c.quit:
-				return
-			case m := <-c.receive:
-				f(m)
-			}
-		}
-	}()
+	c.handler = f
 }
 
 // broadcast broadcasts a message msg to all chatters
 // in the room r.
 func (r *Room) broadcast(from string, m string) {
-	for _, chatter := range r.chatters {
-		chatter.receive <- Msg{from: from, contents: m}
+	for _, c := range r.chatters {
+		if c.room != nil {
+			c.receive <- Msg{from: from, contents: m}
+		}
 	}
 }
+
+// TODO: room FLUSH
+// TODO: room LOGS
