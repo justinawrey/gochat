@@ -22,4 +22,6 @@ func main() {
 	c1.Send("testing from justin")
 	c2.Send("testing from carl")
 	c3.Send("testing from connor")
+
+	r.Flush()
 }
