@@ -3,20 +3,20 @@ package main
 import (
 	"fmt"
 
-	"github.com/justinawrey/chat/chat"
+	"github.com/justinawrey/gochat/pkg/chat"
 )
 
 func main() {
-	r := chat.Room{Name: "test"}
+	r := &chat.Room{Name: "test"}
 	c1 := chat.NewChatter("justin")
 	c2 := chat.NewChatter("carl")
 	c3 := chat.NewChatter("connor")
 
 	for _, c := range []*chat.Chatter{c1, c2, c3} {
-		r.Add(c)
 		c.OnMsgReceive(func(m chat.Msg) {
 			fmt.Println(m)
 		})
+		c.Join(r)
 	}
 
 	c1.Send("testing from justin")
